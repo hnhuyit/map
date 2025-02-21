@@ -17,76 +17,130 @@
 <!-- <script src="java.js"></script> -->
 
 <script>
+
+    // Khởi tạo bản đồ
+    const map = L.map("map").setView([12.238791, 109.196749], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors"
+    }).addTo(map);
+
     const AIRTABLE_API_KEY = "patPPwXL9FfuwZTYC.099dee663593a615cf3c6f6144f141eb62fbf04a501c469eebb321c877acce75"; // Thay bằng API Key của bạn
     const AIRTABLE_BASE_ID = "appQf2DW78dQnBqpN"; // Thay bằng Base ID của bạn
     const AIRTABLE_TABLE_NAME = "H%C3%A0ng"; // Thay bằng tên bảng trong Airtable
+    const AIRTABLE_VIEW_NAME = "latlong"
 
-    // Hàm lấy dữ liệu từ Airtable
-    async function fetchAirtableData() {
-        const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`;
+    // Hàm lấy toàn bộ bản ghi từ Airtable (xử lý phân trang)
+    async function fetchAllRecords() {
+        let allRecords = [];
+        let offset = "";
 
-        try {
+        do {
+            const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}?pageSize=100&offset=${offset}&view=${AIRTABLE_VIEW_NAME}`;
             const response = await fetch(url, {
-                headers: {
-                    Authorization: `Bearer ${AIRTABLE_API_KEY}`
-                }
+                headers: { Authorization: `Bearer ${AIRTABLE_API_KEY}` },
             });
-
-            if (!response.ok) {
-                throw new Error(`Lỗi: ${response.statusText}`);
-            }
-
             const data = await response.json();
-            // console.log(111, data.records)
-            return data.records;
-        } catch (error) {
-            console.error("Lỗi khi lấy dữ liệu từ Airtable:", error);
-            return [];
-        }
+
+            allRecords = allRecords.concat(data.records);
+            offset = data.offset || ""; // Nếu còn trang tiếp theo, lấy offset
+
+            console.log("offset", offset)
+        } while (offset);
+
+        return allRecords;
     }
 
-    // Hàm hiển thị dữ liệu trên bản đồ
-    async function loadMap() {
-        const map = L.map("map").setView([12.238791, 109.196749], 13); // Vị trí mặc định ở Nha Trang
+    // Hiển thị dữ liệu lên bản đồ
+    async function displayDataOnMap() {
+        const properties = await fetchAllRecords();
+        console.log("properties", properties)
+            properties.forEach(property => {
+                const fields = property.fields;
+                
+                // Kiểm tra xem có tọa độ dạng chuỗi không
+                if (fields["Vị trí (Lat, Long)"]) {
+                    const coords = fields["Vị trí (Lat, Long)"].split(",").map(coord => parseFloat(coord.trim()));
+                    if (coords.length === 2) {
+                        const latitude = coords[0];
+                        const longitude = coords[1];
 
-        // console.log(111)
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "© OpenStreetMap contributors"
-        }).addTo(map);
-
-        const records = await fetchAirtableData();
-
-        // console.log(111, records)
-        records.forEach(record => {
-            // console.log("record", record)
-            const location = record.fields["Vị trí (Lat, Long)"]; // Cột chứa tọa độ, định dạng "11.97614523, 109.18305208"
-            const name = record.fields["Tên bất động sản"];
-            const price = record.fields["Giá"];
-            const status = record.fields["Trạng thái"];
-            console.log("location", location)
-
-            if (location) {
-                let coords = location.split(",");
-                console.log(111, coords)
-
-                if (coords.length === 2) {
-                    let lat = parseFloat(coords[0].trim());
-                    let lon = parseFloat(coords[1].trim());
-
-                    if (!isNaN(lat) && !isNaN(lon)) {
-                        let popupContent = `<b>${name}</b><br>Giá: ${price} VNĐ<br>Trạng thái: ${status}`;
-                        L.marker([lat, lon]).addTo(map)
-                            .bindPopup(popupContent);
-                    } else {
-                        console.warn("Lỗi tọa độ không hợp lệ:", location);
+                        L.marker([latitude, longitude]).addTo(map)
+                            .bindPopup(`<b>${fields["Tiêu đề"] || "Không có tên"}</b><br>Giá: ${fields["Giá (show)"] || "Không rõ"} VNĐ<br>Trạng thái: ${fields["Trạng thái"] || "Chưa xác định"}`);
                     }
                 }
-            }
-        });
+            });
     }
 
-    // Gọi hàm để tải bản đồ
-    loadMap();
+
+    // Gọi hàm để hiển thị dữ liệu
+    displayDataOnMap();
+
+    // // Hàm lấy dữ liệu từ Airtable
+    // async function fetchAirtableData() {
+    //     const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}`;
+
+    //     try {
+    //         const response = await fetch(url, {
+    //             headers: {
+    //                 Authorization: `Bearer ${AIRTABLE_API_KEY}`
+    //             }
+    //         });
+
+    //         if (!response.ok) {
+    //             throw new Error(`Lỗi: ${response.statusText}`);
+    //         }
+
+    //         const data = await response.json();
+    //         // console.log(111, data.records)
+    //         return data.records;
+    //     } catch (error) {
+    //         console.error("Lỗi khi lấy dữ liệu từ Airtable:", error);
+    //         return [];
+    //     }
+    // }
+
+    // // Hàm hiển thị dữ liệu trên bản đồ
+    // async function loadMap() {
+    //     const map = L.map("map").setView([12.238791, 109.196749], 13); // Vị trí mặc định ở Nha Trang
+
+    //     // console.log(111)
+    //     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    //         attribution: "© OpenStreetMap contributors"
+    //     }).addTo(map);
+
+    //     const records = await fetchAirtableData();
+
+    //     // console.log(111, records)
+    //     records.forEach(record => {
+    //         // console.log("record", record)
+    //         const location = record.fields["Vị trí (Lat, Long)"]; // Cột chứa tọa độ, định dạng "11.97614523, 109.18305208"
+    //         const name = record.fields["Tên bất động sản"];
+    //         const price = record.fields["Giá"];
+    //         const status = record.fields["Trạng thái"];
+    //         console.log("location", location)
+
+    //         if (location) {
+    //             let coords = location.split(",");
+    //             console.log(111, coords)
+
+    //             if (coords.length === 2) {
+    //                 let lat = parseFloat(coords[0].trim());
+    //                 let lon = parseFloat(coords[1].trim());
+
+    //                 if (!isNaN(lat) && !isNaN(lon)) {
+    //                     let popupContent = `<b>${name}</b><br>Giá: ${price} VNĐ<br>Trạng thái: ${status}`;
+    //                     L.marker([lat, lon]).addTo(map)
+    //                         .bindPopup(popupContent);
+    //                 } else {
+    //                     console.warn("Lỗi tọa độ không hợp lệ:", location);
+    //                 }
+    //             }
+    //         }
+    //     });
+    // }
+
+    // // Gọi hàm để tải bản đồ
+    // loadMap();
 
 </script>
 
